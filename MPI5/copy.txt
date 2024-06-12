@@ -1,0 +1,188 @@
+#define _CRT_SECURE_NO_WARNINGS
+#include <stdio.h>
+#include <stdlib.h>
+#include <mpi.h>
+
+int main(int argc, char ** argv)
+{
+	int * algorithm_data = (int *)malloc(sizeof(int) * 5);
+	MPI_Init(&argc, &argv);
+	//int process, process_size;
+	//MPI_Comm_rank(MPI_COMM_WORLD, &process);				// Получаем номер конкретного процесса на котором запущена программа
+	//MPI_Comm_size(MPI_COMM_WORLD, &process_size);			// Получаем количество запущенных процессов
+	//MPI_Status status;
+	int dims[2] = {0, 0}, periods[2] = {0, 0}, coords[2], reorder = 1;
+	int size, rank, sizey, sizex, ranky, rankx;
+	int prevy, prevx, nexty, nextx;
+	MPI_Comm comm2d;										// коммуникатор
+	MPI_Comm_size(MPI_COMM_WORLD, &size);					//Извлекает количество процессов, участвующих в коммуникаторе, или общее количество доступных процессов.
+
+	// определение размеров решетки: dims
+	MPI_Dims_create(size, 2, dims);							//Создает деление процессоров в декартовой сетке.
+	sizey = dims[0]; sizex = dims[1];						//Определяем размер каждого измерения
+
+	MPI_Cart_create(MPI_COMM_WORLD, 2, dims, periods, reorder, &comm2d);		// создание коммуникатора: comm2d
+	MPI_Comm_rank(comm2d, &rank);												// получение своего номера в comm2d: rank
+	MPI_Cart_get(comm2d, 2, dims, periods, coords);								// получение своих координат в двумерной решетке: coords
+	ranky = coords[0]; rankx = coords[1];
+
+	MPI_Comm column_comm;
+	const int column_dims[2] = { 1, 0 };
+	MPI_Cart_sub(comm2d, column_dims, &column_comm);
+	int column_rank;
+	MPI_Comm_rank(column_comm, &column_rank);
+
+	MPI_Comm row_comm, first_row_comm;
+	const int row_dims[2] = { 0, 1 };
+	MPI_Cart_sub(comm2d, row_dims, &row_comm);
+	int row_rank;
+	MPI_Comm_rank(row_comm, &row_rank);
+	//MPI_Comm_split(comm2d, ranky, rank, &first_row_comm);
+	//MPI_Comm_split(row_comm, ranky, column_rank, &first_row_comm);
+	//MPI_Comm_split(comm2d, coords[0], coords[1], &first_row_comm);
+	//int first_row_rank;
+	//MPI_Comm_rank(first_row_comm, &first_row_rank);
+
+	// определение номеров соседей: prevy, nexty, prevx, nextx
+	MPI_Cart_shift(comm2d, 0, 1, &prevy, &nexty);
+	MPI_Cart_shift(comm2d, 1, 1, &prevx, &nextx);
+
+	printf("DONE1\n");
+	int Adim = -1, Bdim = -1;
+	int n1, n2, n3;
+	double* A = 0;
+	double* B = 0;
+	if (rank == 0)
+	{
+		freopen("input.txt", "r", stdin);
+		scanf("%d %d %d", &n1, &n2, &n3);
+		Adim = (n1 + sizex - n1 % sizex), Bdim = (n3 + sizey - n3 % sizey); 
+		printf("n1: %d, sizey: %d, n3: %d, sizex: %d, Adim: %d, Bdim: %d\n", n1, sizey, n3, sizex, Adim, Bdim);
+		A = (double*)malloc(sizeof(double) * Adim * n2);
+		B = (double*)malloc(sizeof(double) * Bdim * n2);
+		for (int i = 0; i < n1; ++i)
+		{
+			for (int j = 0; j < n2; ++j)
+			{
+				scanf("%lf", &A[i*n2 + j]);
+			}
+			//printf("\n");
+		}
+		for (int i = n1 * n2; i < Adim * n2; ++i)
+		{
+			A[i] = 0;
+			printf("ZERO\n");
+		}
+
+		for (int i = 0; i < n2; ++i)
+		{
+			for (int j = 0; j < n3; ++j)
+			{
+				scanf("%lf", &B[j*n2 + i]);
+			}
+			//printf("\n");
+		}
+		for (int i = n2 * n3; i < Bdim * n2; ++i)
+		{
+			B[i] = 0;
+		}
+		//printf("rank: %d, DONEDDDD. size: %d\n", rank, size);
+		algorithm_data[0] = n1; algorithm_data[1] = n2; algorithm_data[2] = n3;
+		algorithm_data[3] = Adim; algorithm_data[4] = Bdim;
+		//printf("rank: %d, DONEDDsdgsdgfsdDD. size: %d\n", rank, size);
+	}
+	MPI_Bcast(algorithm_data, 5, MPI_INT, 0, MPI_COMM_WORLD);
+	//printf("rank: %d, sdgsdgDONEsfsefgggDDsdgsdgfsdDD. size: %d\n", rank, size);
+	printf("rank: %d, DONE. size: %d\n", rank, size);
+	MPI_Barrier(MPI_COMM_WORLD);
+	n1 = algorithm_data[0];
+	n2 = algorithm_data[1];
+	n3 = algorithm_data[2];
+	Adim = algorithm_data[3];
+	Bdim = algorithm_data[4];
+	int partA = (Adim / sizex)*n2;
+	int partB = (Bdim / sizey)*n2;
+	printf("n1: %d, sizey: %d, n2: %d, n3: %d, sizex: %d, Adim: %d, Bdim: %d, partA: %d, partB: %d\n", n1, sizey, n2, n3, sizex, Adim, Bdim, partA, partB);
+	double * Ac = (double*)malloc(sizeof(double) * partA);
+	double * Bc = (double*)malloc(sizeof(double) * partB);
+	printf("rank: %d, row_rank: %d, column_rank: %d\n", rank, row_rank, column_rank);
+	MPI_Barrier(MPI_COMM_WORLD);
+	//Отправляем данные по первому столбцу и первой строке
+	if (row_rank == 0)
+	{
+		MPI_Scatter(B, partB, MPI_DOUBLE, Bc, partB, MPI_DOUBLE, 0, column_comm);
+	}
+	if (column_rank == 0)
+	{
+		MPI_Scatter(A, partA, MPI_DOUBLE, Ac, partA, MPI_DOUBLE, 0, row_comm);
+	}
+
+	MPI_Bcast(Bc, partB, MPI_DOUBLE, 0, row_comm);
+	MPI_Bcast(Ac, partA, MPI_DOUBLE, 0,column_comm);
+	
+	/*
+	for (int i = 0; i < size; ++i)
+	{
+		MPI_Barrier(MPI_COMM_WORLD);
+		if (rank == i)
+		{
+			printf("rank: %d, ", rank);
+			for (int j = 0; j < partA; ++j)
+			{
+				printf("%lf ", Ac[j]);
+			}
+			printf("\n");
+		}
+	}
+	*/
+	if (rank == 0)
+	{
+		printf("A:\n");
+	}
+	for (int i = 0; i < size; ++i)
+	{
+		MPI_Barrier(MPI_COMM_WORLD);
+		if (rank == i)
+		{
+			printf("rank: %d, ", rank);
+			for (int j = 0; j < partA; ++j)
+			{
+				printf("%lf ", Ac[j]);
+			}
+			printf("\n");
+		}
+	}
+
+	MPI_Barrier(MPI_COMM_WORLD);
+	if (rank == 0)
+	{
+		printf("B:\n");
+	}
+	for (int i = 0; i < size; ++i)
+	{
+		MPI_Barrier(MPI_COMM_WORLD);
+		if (rank == i)
+		{
+			printf("rank: %d, ", rank);
+			for (int j = 0; j < partB; ++j)
+			{
+				printf("%lf ", Bc[j]);
+			}
+			printf("\n");
+		}
+	}
+	//MPI_Bcast()
+
+	
+
+	if (rank == 0)
+	{
+		free(A);
+		free(B);
+	}
+	free(algorithm_data);
+	free(Ac);
+	free(Bc);
+	MPI_Finalize();
+	return 0;
+}

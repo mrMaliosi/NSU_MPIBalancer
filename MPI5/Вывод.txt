@@ -1,0 +1,17 @@
+/*
+	for (int p = 0; p < process_size; ++p)
+	{
+		MPI_Barrier(MPI_COMM_WORLD);
+		if (p == process)
+		{
+			printf("process: %d, ", process);
+			//freopen("output.txt", "a", stdout);
+			for (int i = 0; i < recvcount; ++i)
+			{
+				printf("%d ", TaskList_ready[i].id);
+			}
+			//fclose(stdout);
+			printf("\n");
+		}
+	}
+*/

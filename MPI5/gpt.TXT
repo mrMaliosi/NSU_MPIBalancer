@@ -1,0 +1,157 @@
+#define _CRT_SECURE_NO_WARNINGS
+#include <stdio.h>
+#include <stdlib.h>
+#include <mpi.h>
+#include <time.h>
+#include <pthread.h>
+
+
+
+
+#define FIRST_PROCESS 0
+#define TASK_SIZE 1000
+#define MAX_PROCESSES_SIZE 2000
+#define BIG_BOY 9999999999999999
+
+typedef long long ll;
+
+typedef struct Task
+{
+	int id;
+	int type;
+	ll n;
+} Task; 
+
+Task TaskList_new[TASK_SIZE];
+Task TaskList_ready[TASK_SIZE];
+ll key = 1000000000;
+ll offset = 1234567899;
+ll cycle = 10000000000;
+
+int recvcounts[MAX_PROCESSES_SIZE];			
+int displs[MAX_PROCESSES_SIZE];
+int reports[MAX_PROCESSES_SIZE] = { 1 };
+
+void *execute_task(Task task);
+void *send_report(int process, int task_count, int process_size, int start, int recvcount);
+
+
+int main(int argc, char ** argv)
+{
+	MPI_Init(&argc, &argv);
+	int process, process_size;
+	MPI_Comm_rank(MPI_COMM_WORLD, &process);				// Получаем номер конкретного процесса на котором запущена программа
+	MPI_Comm_size(MPI_COMM_WORLD, &process_size);			// Получаем количество запущенных процессов
+	if (process == FIRST_PROCESS) {
+		printf("process_size: %d\n", process_size);
+	}
+	
+	MPI_Datatype MPI_Task;
+	int blocklengths[3] = { 1, 1, 1 };
+	MPI_Datatype types[3] = { MPI_INT, MPI_INT, MPI_LONG_LONG };
+	MPI_Aint offsets[3];
+
+	offsets[0] = offsetof(Task, id);
+	offsets[1] = offsetof(Task, type);
+	offsets[2] = offsetof(Task, n);
+
+	MPI_Type_create_struct(3, blocklengths, offsets, types, &MPI_Task);
+	MPI_Type_commit(&MPI_Task);
+
+	
+	for (int o = 0; o < 1; ++o) {
+		///////////////////Составляем список задач///////////////////
+		//Некоторый код
+
+		int start = 0;
+		pthread_t comrade_Malinovskii, comrade_Ivanishkin, comrade_Maliosi;
+		int  iret1, iret2;
+
+		while(1 > 0)
+		{
+			if (start < recvcount)
+			{
+				iret1 = pthread_create(&comrade_Maliosi, NULL, execute_task, TaskList_ready[start]);
+				++start;
+				if (iret1) {
+					fprintf(stderr, "Ошибка 1 - pthread_create() return code: %d\n", iret1);
+					exit(EXIT_FAILURE);
+				}
+			}
+			
+
+			iret2 = pthread_create(&comrade_Ivanishkin, NULL, send_report, process, recvcount - start - 1, process_size, start + 1, recvcount);
+			if (iret2) {
+				fprintf(stderr, "Ошибка2 - pthread_create() return code: %d\n", iret2);
+				exit(EXIT_FAILURE);
+			}
+
+			void *result_Maliosi;
+			pthread_join(comrade_Maliosi, &result_Maliosi);
+			void *result_Ivanishkin;
+			pthread_join(comrade_Ivanishkin, &result_Ivanishkin);
+
+			if ((long long)result_Ivanishkin == BIG_BOY) {
+				break;
+			}
+			recvcount += (int)result_Ivanishkin;
+		}
+
+	}
+	
+	MPI_Finalize();
+	return 0;
+}
+
+void *execute_task(Task task) {
+	ll n = task.n;
+	ll a = 0;
+	ll b = a;
+	for (int i = 0; i < n; ++i) {
+		a += 1;
+		b = a;
+	}
+	printf("id: %d, n: %ll\n", task.id, b);
+	pthread_exit(NULL);
+}
+
+void *send_report(int process, int task_count, int process_size, int start, int recvcount) {
+	MPI_Allgather(&task_count, 1, MPI_INT, reports, process_size, MPI_INT, MPI_COMM_WORLD);
+	int flag = 1;
+	int requesting_process = -1;
+	int max_process = -1, max_count = -1;
+	for (int i = 0; i < process_size; ++i)
+	{
+		if (reports[i] != 0) {
+			flag = 0;
+			if (reports[i] > max_count) {
+				max_count = reports[i];
+				max_process = i;
+			}
+		}
+		else {
+			requesting_process = i;
+		}
+	}
+
+	if (flag == 0) {
+		return (void *)(long long)BIG_BOY;
+	}
+
+	if (requesting_process != -1)
+	{
+		if (process == requesting_process) {
+			MPI_Recv(TaskList_ready + recvcount, max_count / 2, MPI_Task, max_process, 0, MPI_COMM_WORLD, NULL);
+			return (void *)(int) (max_count / 2);
+		}
+
+		if (process == max_process) {
+			MPI_Send(TaskList_ready + start, max_count / 2, MPI_Task, requesting_process, 0, MPI_COMM_WORLD, NULL);
+			return (void *)(int) (-max_count / 2);
+		}
+	}
+	
+	return (void *)(int) 0;
+}
+
+

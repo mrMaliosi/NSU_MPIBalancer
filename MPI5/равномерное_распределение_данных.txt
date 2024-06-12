@@ -1,0 +1,150 @@
+#define _CRT_SECURE_NO_WARNINGS
+#include <stdio.h>
+#include <stdlib.h>
+#include <mpi.h>
+#include <time.h>
+
+
+//Сижу я долго за компом, что затекла нога
+//И нету мысли уж давно и слова в тоске опять
+//Иванишкин говорит, что с кодом всё не то
+//Какой же MPI шальной и всегда с ним всё не то..
+
+//Не прессуй меня MPI, ой не прессуй...
+//Без костыля и кода нееет..
+//Пусть лажа в проде, её ты подебаж..
+//Консоль наш крест и оберееег...
+
+//Не прессуй меня MPI, ой не прессуй...
+//Без костыля и кода нееет..
+//Пусть лажа в проде, её ты подебажь..
+//Расставлю я тебе обед..
+
+//Снова костыли на коде, а за окном 4-ый час
+//Сервер падает и стонет и VS горит опять..
+//Логи наши в гигабайтах, а код всё равно горит.. 
+//Прошу прости меня за все грехи мои..
+
+//Не прессуй меня MPI, ой не прессуй...
+//Без костыля и кода нееет..
+//Пусть лажа в проде, её ты подебаж..
+//Консоль наш крест и оберееег...
+
+//Не прессуй меня MPI, ой не прессуй...
+//Без костыля и кода нееет..
+//Пусть лажа в проде, её ты подебаж..
+//Расставлю я тебе обед..
+
+#define FIRST_PROCESS 0
+#define TASK_SIZE 76
+#define MAX_PROCESSES_SIZE 2000
+
+typedef long long ll;
+
+typedef struct Task
+{
+	int id;
+	int type;
+	ll n;
+} Task; 
+
+Task TaskList_new[TASK_SIZE];
+Task TaskList_ready[TASK_SIZE];
+ll key = 1000000000;
+ll offset = 1234567899;
+ll cycle = 10000000000;
+
+int recvcounts[MAX_PROCESSES_SIZE];			
+int displs[MAX_PROCESSES_SIZE];
+
+
+int main(int argc, char ** argv)
+{
+	MPI_Init(&argc, &argv);
+	int process, process_size;
+	MPI_Comm_rank(MPI_COMM_WORLD, &process);				// Получаем номер конкретного процесса на котором запущена программа
+	MPI_Comm_size(MPI_COMM_WORLD, &process_size);			// Получаем количество запущенных процессов
+	if (process == FIRST_PROCESS) {
+		printf("process_size: %d\n", process_size);
+	}
+	
+	MPI_Datatype MPI_Task;
+	int blocklengths[3] = { 1, 1, 1 };
+	MPI_Datatype types[3] = { MPI_INT, MPI_INT, MPI_LONG_LONG };
+	MPI_Aint offsets[3];
+
+	offsets[0] = offsetof(Task, id);
+	offsets[1] = offsetof(Task, type);
+	offsets[2] = offsetof(Task, n);
+
+	MPI_Type_create_struct(3, blocklengths, offsets, types, &MPI_Task);
+	MPI_Type_commit(&MPI_Task);
+
+	
+	for (int o = 0; o < 1; ++o) {
+		///////////////////Составляем список задач///////////////////
+		if (process == FIRST_PROCESS) {
+			for (int i = 0; i < TASK_SIZE; ++i) {
+				TaskList_new[i].id = i;
+				TaskList_new[i].type = 1;
+				TaskList_new[i].n = key;
+				key = (key + offset) % cycle;
+			}
+
+			// Расчет количества элементов для каждого процесса
+			int base_count = TASK_SIZE / process_size;
+			int remainder = TASK_SIZE % process_size;
+
+			// Расчет смещений и количества элементов для каждого процесса
+			for (int i = 0; i < process_size; i++) {
+				recvcounts[i] = base_count + (i < remainder ? 1 : 0);
+				displs[i] = (i > 0) ? (displs[i - 1] + recvcounts[i - 1]) : 0;
+			}
+		}
+		int base_count = TASK_SIZE / process_size;
+		int remainder = TASK_SIZE % process_size;
+		int recvcount = base_count + (process < remainder ? 1 : 0);
+		MPI_Scatterv(TaskList_new, recvcounts, displs, MPI_Task, TaskList_ready, recvcount, MPI_Task, FIRST_PROCESS, MPI_COMM_WORLD);
+
+		
+		for (int p = 0; p < process_size; ++p)
+		{
+			MPI_Barrier(MPI_COMM_WORLD);
+			if (p == process)
+			{
+				printf("process: %d, ", process);
+				//freopen("output.txt", "a", stdout);
+				for (int i = 0; i < recvcount; ++i)
+				{
+					printf("%d ", TaskList_ready[i].id);
+				}
+				//fclose(stdout);
+				printf("\n");
+			}
+		}
+
+	}
+	MPI_Finalize();
+
+
+
+
+	/*
+		for (int p = 0; p < process_size; ++p)
+		{
+			MPI_Barrier(MPI_COMM_WORLD);
+			if (p == process)
+			{
+				printf("process: %d, ", process);
+				//freopen("output.txt", "a", stdout);
+				for (int i = 0; i < recvcount; ++i)
+				{
+					printf("%d ", TaskList_ready[i].id);
+				}
+				//fclose(stdout);
+				printf("\n");
+			}
+		}
+	*/
+	return 0;
+}

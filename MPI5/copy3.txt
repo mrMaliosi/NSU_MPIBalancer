@@ -1,0 +1,261 @@
+#define _CRT_SECURE_NO_WARNINGS
+#include <stdio.h>
+#include <stdlib.h>
+#include <mpi.h>
+#include <time.h>
+#include <stddef.h>
+#include <pthread.h>
+
+//Сижу я долго за компом, что затекла нога
+//И нету мысли уж давно и слова в тоске опять
+//Иванишкин говорит, что с кодом всё не то
+//Какой же MPI шальной и всегда с ним всё не то..
+
+//Не прессуй меня MPI, ой не прессуй...
+//Без костыля и кода нееет..
+//Пусть лажа в проде, её ты подебаж..
+//Консоль наш крест и оберееег...
+
+//Не прессуй меня MPI, ой не прессуй...
+//Без костыля и кода нееет..
+//Пусть лажа в проде, её ты подебажь..
+//Расставлю я тебе обед..
+
+//Снова костыли на коде, а за окном 4-ый час
+//Сервер падает и стонет и VS горит опять..
+//Логи наши в гигабайтах, а код всё равно горит.. 
+//Прошу прости меня за все грехи мои..
+
+//Не прессуй меня MPI, ой не прессуй...
+//Без костыля и кода нееет..
+//Пусть лажа в проде, её ты подебаж..
+//Консоль наш крест и оберееег...
+
+//Не прессуй меня MPI, ой не прессуй...
+//Без костыля и кода нееет..
+//Пусть лажа в проде, её ты подебаж..
+//Расставлю я тебе обед..
+
+#define FIRST_PROCESS 0
+#define TASK_SIZE 100
+#define MAX_PROCESSES_SIZE 2000
+#define BIG_BOY 9999999999999999
+
+typedef long long ll;
+
+typedef struct Task
+{
+	ll id;
+	ll type;
+	ll n;
+} Task;
+
+MPI_Datatype MPI_Task;
+
+Task TaskList_new[TASK_SIZE];
+Task TaskList_ready[TASK_SIZE];
+ll key = 1000000000;
+ll offset = 1234567899;
+ll cycle = 10000000000;
+
+int recvcounts[MAX_PROCESSES_SIZE];
+int displs[MAX_PROCESSES_SIZE];
+int reports[MAX_PROCESSES_SIZE] = { 1 };
+
+void *FSB(void * arr) {
+	ll * function_array = (ll*)arr;
+	ll id = function_array[0];
+	ll n = function_array[1];
+	ll a = 0;
+	for (ll i = 0; i < n; ++i) {
+		a += 1;
+	}
+	printf("array[0]: %lld, array[1]: %lld, id: %lld, n: %lld\n", function_array[0], function_array[1], id, a);
+	free(arr);
+	pthread_exit(NULL);
+}
+
+void *execute_task(void * arr) {
+	ll * function_array = (ll*)arr;
+	ll id = function_array[0];
+	ll n = function_array[1];
+	ll a = 0;
+	for (ll i = 0; i < n; ++i) {
+		a += 1;
+	}
+	printf("array[0]: %lld, array[1]: %lld, id: %lld, n: %lld\n", function_array[0], function_array[1], id, a);
+	free(arr);
+	pthread_exit(NULL);
+}
+
+void *send_report(void* arr2) {
+	int* function_array = (int*)arr2;
+	int process = function_array[0];
+	int task_count = function_array[1];
+	int process_size = function_array[2];
+	int start = function_array[3];
+	int recvcount = function_array[4];
+	printf("0: %d, 1: %d, 2: %d, 3: %d, 4: %d\n", function_array[0], function_array[1], function_array[2], function_array[3], function_array[4]);
+	MPI_Allgather(&task_count, 1, MPI_INT, reports, process_size, MPI_INT, MPI_COMM_WORLD);													//Коллективные операции в процессах получается работают только на вызывающий процесс?
+	int flag = 1;
+	int requesting_process = -1;
+	int max_process = -1, max_count = -1;
+	for (int i = 0; i < process_size; ++i)
+	{
+		printf("reports[%d]: %d\n", i, reports[i]);
+		if (reports[i] != 0) {
+			flag = 0;
+			if (reports[i] > max_count) {
+				max_count = reports[i];
+				max_process = i;
+			}
+		}
+		else {
+			requesting_process = i;
+		}
+	}
+
+	if (flag == 1) {
+		free(arr2);
+		return (void *)(long long)BIG_BOY;
+	}
+
+	if (requesting_process != -1)
+	{
+		if (process == requesting_process) {
+			MPI_Recv(TaskList_ready + recvcount * (sizeof(Task)), max_count / 2, MPI_Task, max_process, 0, MPI_COMM_WORLD, NULL);
+			int* result = (int*)malloc(sizeof(int));
+			*result = (max_count / 2);
+			free(arr2);
+			return (void *)result;
+		}
+
+		if (process == max_process) {
+			MPI_Send(TaskList_ready + start * (sizeof(Task)), max_count / 2, MPI_Task, requesting_process, 0, MPI_COMM_WORLD);
+			int* result = (int*)malloc(sizeof(int));
+			*result = -(max_count / 2);
+			free(arr2);
+			return (void *)result;
+		}
+	}
+
+	int* result = (int*)malloc(sizeof(int));
+	*result = 0;
+	free(arr2);
+	return (void *)result;
+}
+
+int main(int argc, char ** argv)
+{
+	for (int i = 0; i < MAX_PROCESSES_SIZE; ++i) {
+		reports[i] = 1;
+	}
+
+	MPI_Init(&argc, &argv);
+	int process, process_size;
+	MPI_Comm_rank(MPI_COMM_WORLD, &process);				// Получаем номер конкретного процесса на котором запущена программа
+	MPI_Comm_size(MPI_COMM_WORLD, &process_size);			// Получаем количество запущенных процессов
+	if (process == FIRST_PROCESS) {
+		printf("process_size: %d, %d\n", process_size, reports[100]);
+	}
+
+
+	MPI_Datatype MPI_Task;
+	int blocklengths[3] = { 1, 1, 1 };
+	MPI_Datatype types[3] = { MPI_LONG_LONG, MPI_LONG_LONG, MPI_LONG_LONG };
+	MPI_Aint offsets[3];
+
+	offsets[0] = offsetof(Task, id);
+	offsets[1] = offsetof(Task, type);
+	offsets[2] = offsetof(Task, n);
+
+	MPI_Type_create_struct(3, blocklengths, offsets, types, &MPI_Task);
+	MPI_Type_commit(&MPI_Task);
+
+
+	for (int o = 0; o < 1; ++o) {
+		///////////////////Составляем список задач///////////////////
+		if (process == FIRST_PROCESS) {
+			for (int i = 0; i < TASK_SIZE; ++i) {
+				TaskList_new[i].id = i;
+				TaskList_new[i].type = 1;
+				TaskList_new[i].n = key;
+				//printf("i: %d, key: %lld, TaskList_new[i].n: %lld\n", i, key, TaskList_new[i].n);
+				key = (key + offset) % cycle;
+			}
+
+			// Расчет количества элементов для каждого процесса
+			int base_count = TASK_SIZE / process_size;
+			int remainder = TASK_SIZE % process_size;
+
+			// Расчет смещений и количества элементов для каждого процесса
+			for (int i = 0; i < process_size; i++) {
+				recvcounts[i] = base_count + (i < remainder ? 1 : 0);
+				displs[i] = (i > 0) ? (displs[i - 1] + recvcounts[i - 1]) : 0;
+			}
+		}
+		int base_count = TASK_SIZE / process_size;
+		int remainder = TASK_SIZE % process_size;
+		int recvcount = base_count + (process < remainder ? 1 : 0);
+		MPI_Scatterv(TaskList_new, recvcounts, displs, MPI_Task, TaskList_ready, recvcount, MPI_Task, FIRST_PROCESS, MPI_COMM_WORLD);
+
+		int start = 0;
+		pthread_t comrade_Malinovskii, comrade_Ivanishkin, comrade_Maliosi;
+		int  iret1, iret2;
+
+		while (1 > 0)
+		{
+			printf("process: %d, start: %d, recvcount: %d\n", process, start, recvcount);
+			if (start < recvcount)
+			{
+				//printf("TaskList_ready[start].id: %lld, TaskList_ready[start].n: %lld\n", TaskList_ready[start].id, TaskList_ready[start].n);
+				//ll arr1[2] = { TaskList_ready[start].id, TaskList_ready[start].n };
+				//printf("arr1[0]: %lld, arr1[1]: %lld\n", arr1[0], arr1[1]);
+				ll* arr1 = (ll*)malloc(2 * sizeof(ll));
+				arr1[0] = TaskList_ready[start].id;
+				arr1[1] = TaskList_ready[start].n;
+				iret1 = pthread_create(&comrade_Maliosi, NULL, execute_task, (void*)arr1);
+				++start;
+				if (iret1) {
+					fprintf(stderr, "Ошибка 1 - pthread_create() return code: %d\n", iret1);
+					exit(EXIT_FAILURE);
+				}
+			}
+
+
+			//ll arr2[5] = { process, recvcount - start - 1, process_size, start + 1, recvcount };
+			int* arr2 = (int*)malloc(5 * sizeof(int));
+			arr2[0] = process;
+			arr2[1] = recvcount - start - 1;
+			arr2[2] = process_size;
+			arr2[3] = start + 1;
+			arr2[4] = recvcount;
+			iret2 = pthread_create(&comrade_Ivanishkin, NULL, send_report, (void*)arr2);
+			if (iret2) {
+				fprintf(stderr, "Ошибка2 - pthread_create() return code: %d\n", iret2);
+				exit(EXIT_FAILURE);
+			}
+
+
+			void *result_Maliosi;
+			pthread_join(comrade_Maliosi, &result_Maliosi);
+			void *result_Ivanishkin;
+			pthread_join(comrade_Ivanishkin, &result_Ivanishkin);
+
+			if ((long long)result_Ivanishkin == BIG_BOY) {
+				printf("BIG_BOY\n");
+				break;
+			}
+			recvcount += *(int*)result_Ivanishkin;
+			free(result_Ivanishkin);
+		}
+
+	}
+
+	MPI_Finalize();
+	return 0;
+}
+
+
+
+
